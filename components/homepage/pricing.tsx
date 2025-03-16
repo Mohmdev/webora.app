@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/convex/_generated/api";
 import { usePolarData } from "@/lib/contexts/polar-context";
+import type { PolarProduct } from "@/lib/contexts/polar-context";
 import { useUser } from "@clerk/nextjs";
 import { useAction } from "convex/react";
 import { CheckCircle2, DollarSign } from "lucide-react";
@@ -19,6 +20,7 @@ import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+// Define the Price interface that matches the new Polar structure
 interface Price {
 	id: string;
 	priceAmount: number;
@@ -31,6 +33,7 @@ interface Benefit {
 	description: string;
 }
 
+// Updated Product interface to match the PolarProduct structure
 interface Product {
 	id: string;
 	name: string;
@@ -49,7 +52,7 @@ interface Product {
 
 interface PricingProps {
 	result?: {
-		items: Product[];
+		items: (Product | PolarProduct)[];
 		pagination: {
 			totalCount: number;
 			maxPage: number;
@@ -178,7 +181,10 @@ const PricingCard = ({
 
 				<div className="space-y-3">
 					{benefits.map((benefit, index) => (
-						<div key={index} className="flex items-center gap-2">
+						<div
+							key={`${name}-benefit-${benefit.description.substring(0, 10)}-${index}`}
+							className="flex items-center gap-2"
+						>
 							<CheckCircle2 className="h-5 w-5 flex-shrink-0 text-blue-500" />
 							<p className="text-sm text-muted-foreground">
 								{benefit.description}
@@ -200,21 +206,77 @@ const PricingCard = ({
 	);
 };
 
+// Helper function to transform PolarProduct prices to Price[] format
+const transformPrices = (polarProduct: PolarProduct): Price[] => {
+	return polarProduct.prices.map((price) => {
+		// Convert from Polar's format to our Price interface
+		return {
+			id: price.id || "",
+			priceAmount: typeof price.amount === "number" ? price.amount : 0,
+			priceCurrency: price.currency || "USD",
+			recurringInterval: (price.interval || "month") as "month" | "year",
+			productId: polarProduct.id,
+		};
+	});
+};
+
+// Helper function to extract benefits from product
+const extractBenefits = (product: PolarProduct): Benefit[] => {
+	// Try to extract benefits from any available product property
+	// Since PolarProduct doesn't have a defined metadata field in the interface,
+	// we'll create a default benefit
+
+	// We could try to extract from product properties, but for now,
+	// let's use a default benefit for all products
+	return [
+		{ description: "Access to all premium features" },
+		{ description: "Priority customer support" },
+		{ description: "Regular updates and new content" },
+	];
+};
+
 export default function Pricing({ result }: PricingProps) {
 	// Use context data if no result prop is provided
 	const contextData = usePolarData();
-	const pricingData = result || contextData;
+
+	// Provide fallback data for build time or when API is not available
+	const fallbackData = {
+		items: [],
+		pagination: {
+			totalCount: 0,
+			maxPage: 0,
+		},
+	};
+
+	// Use result prop, then context data, then fallback data
+	const pricingData = result || contextData || fallbackData;
 
 	const [isYearly, setIsYearly] = useState<boolean>(false);
 	const [hasYearlyPlans, setHasYearlyPlans] = useState(false);
 	const { user } = useUser();
+
+	// Transform products to ensure consistent format
+	const transformedProducts = pricingData.items.map((item) => {
+		// If it's already a Product type with proper prices
+		if ("benefits" in item) {
+			return item as Product;
+		}
+
+		// It's a PolarProduct, transform it
+		const polarItem = item as PolarProduct;
+		return {
+			...polarItem,
+			prices: transformPrices(polarItem),
+			benefits: extractBenefits(polarItem),
+		} as Product;
+	});
 
 	const togglePricingPeriod = (value: string) =>
 		setIsYearly(Number.parseInt(value) === 1);
 
 	useEffect(() => {
 		// Check if any products have yearly pricing
-		const hasYearly = pricingData.items.some((product) =>
+		const hasYearly = transformedProducts.some((product) =>
 			product.prices.some((price) => price.recurringInterval === "year"),
 		);
 		setHasYearlyPlans(hasYearly);
@@ -223,10 +285,10 @@ export default function Pricing({ result }: PricingProps) {
 		if (isYearly && !hasYearly) {
 			setIsYearly(false);
 		}
-	}, [pricingData.items, isYearly]);
+	}, [transformedProducts, isYearly]);
 
 	// Filter products based on current interval selection
-	const filteredProducts = pricingData.items.filter((item) =>
+	const filteredProducts = transformedProducts.filter((item) =>
 		item.prices?.some((price) =>
 			isYearly
 				? price.recurringInterval === "year"

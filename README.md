@@ -234,6 +234,17 @@ In your Convex dashboard, add a plan to the `plans` table:
     }
   }
 }
+{
+   "polarId": "<yearly-product-id>",      
+   "amount": "<yearly-amount>",
+   "polarPriceId": "<yearly-price-id>"
+},
+{
+   "polarId": "<monthly-product-id>",
+   "amount": "<monthly-amount>",
+   "polarPriceId": "<monthly-price-id>"
+}
+
 ```
 
 ### 4. Development vs Production Setup

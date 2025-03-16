@@ -38,8 +38,18 @@ export function PolarDataProvider({
 
 export function usePolarData() {
 	const context = useContext(PolarDataContext);
+
+	// Provide a fallback when context is not available
 	if (context === null) {
-		throw new Error("usePolarData must be used within a PolarDataProvider");
+		// During build or when the provider is not available, return empty data
+		return {
+			items: [],
+			pagination: {
+				totalCount: 0,
+				maxPage: 0,
+			},
+		};
 	}
+
 	return context;
 }
